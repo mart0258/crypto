@@ -94,6 +94,26 @@ char *subst_decode(const char *encodetext, const char *key)
     return plaintext;
 }
 
+void frequency(char *pt, int freq[27])
+{
+	int i,j,t;
+	char cur;
+	for (j=0; j<27; ++j)
+		freq[j]=0;
+
+	for (i=0; pt[i]; ++i)
+	{
+		cur=pt[i];
+		if (cur==' ' || isalpha(cur))
+		{
+			if (cur==' ') t=0;
+			else t=toupper(a)-'A'+1;
+
+			freq[t]++;
+		}
+	}
+}
+
 #if 0
 int main (void)
 {

@@ -1,0 +1,292 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" >
+<head>
+    <title>Untitled Page</title>
+</head>
+<body>
+<script type="text/javascript">
+
+    var log_table = new Array();
+    var exp_table = new Array();
+    var sub_table = new Array();
+    var subinv_table = new Array();
+
+    Nb = 4;
+
+    function ArrToHex(w) {
+        a = new Array();
+        for (i = 0; i < w.length; ++i) {
+            a[i] = w[i].toString(16);
+        }
+        return a;
+    }
+
+    function gf_mult_init(a, b)
+    {
+		p=0;poly=0x11b;
+		for (i=0; i<8; ++i)
+		{
+			if (b&1) p^=a;
+			a <<=1;
+			if (a&0x100) a^=poly; 
+			b >>=1;
+		}
+		return p;
+    }
+   
+    function gf_mult(a, b)
+    {
+        if (a==0 || b==0) return 0;
+        return exp_table[(log_table[a]+log_table[b])%255];
+    }
+
+    function mult_inv(a)
+	{
+		if (a==0) return 0;
+		return exp_table[log_table[a]^0xff];
+	}
+
+    function BIT(a,b)
+    {
+        return (a&(1<<b))>>b;
+    }
+
+    function subchar_init(x)
+    {
+		x=mult_inv(x);
+		nval=0;//gf_grid_inv[val];
+		nval|=(BIT(x,7) ^ BIT(x,3) ^ BIT(x,4) ^ BIT(x,5) ^ BIT(x,6));  nval<<=1;
+		nval|=(BIT(x,6) ^ BIT(x,2) ^ BIT(x,3) ^ BIT(x,4) ^ BIT(x,5)^1); nval<<=1;
+		nval|=(BIT(x,5) ^ BIT(x,1) ^ BIT(x,2) ^ BIT(x,3) ^ BIT(x,4)^1); nval<<=1;
+		nval|=(BIT(x,4) ^ BIT(x,0) ^ BIT(x,1) ^ BIT(x,2) ^ BIT(x,3)); nval<<=1;
+		nval|=(BIT(x,3) ^ BIT(x,7) ^ BIT(x,0) ^ BIT(x,1) ^ BIT(x,2)); nval<<=1;
+		nval|=(BIT(x,2) ^ BIT(x,6) ^ BIT(x,7) ^ BIT(x,0) ^ BIT(x,1)); nval<<=1;
+		nval|=(BIT(x,1) ^ BIT(x,5) ^ BIT(x,6) ^ BIT(x,7) ^ BIT(x,0)^1); nval<<=1;
+		nval|=(BIT(x,0) ^ BIT(x,4) ^ BIT(x,5) ^ BIT(x,6) ^ BIT(x,7)^1); 
+		return nval;
+    }
+
+    function init()
+    {
+  		y=1;
+		log_table[0]=0;
+		for (x=0; x<256; ++x)
+		{
+			exp_table[x]=y;
+			log_table[y]=x;
+			y=gf_mult_init(y,0xa5);//0xa5);
+		}
+        for (x=0; x<256; ++x)
+        {
+            y=subchar_init(x);
+            sub_table[x]=y;
+            subinv_table[y]=x;
+        }
+    }
+    
+    init();
+
+    function subchar(a)
+    {
+        return sub_table[a];
+    }
+
+    function SubWord(v)
+    {
+        a=subchar(v&0xff);
+        b=subchar((v>>8)&0xff);
+        c=subchar((v>>16)&0xff);
+        d=subchar((v>>24)&0xff);
+        //document.getElementById("test").innerHTML = [v,
+        //v&0xff,
+        //(v>>8)&0xff,
+        //(v>>16)&0xff,
+        //(v>>24)&0xff,
+        //];
+        //throw -1;
+        return (d << 24) | (c << 16) | (b << 8) | a;
+    }
+    function RotWord(v) {
+        return ((v&0xffffff) << 8) | ((v>>24)&0xff)
+    }
+    function SubBytes(state)
+    {
+        for (i=0; i<4*Nb; ++i)
+            state[i]=subchar(state[i]);
+    }
+    function ShiftRows(state) {
+        statep = new Array();
+		for (c=0; c<Nb; ++c)
+		{
+			for (r=0; r<4; ++r)
+			{
+				statep[c*4+r]=state[((c+r)%Nb)*4 +r];
+			}
+		}
+		for (c=0; c<4*Nb; ++c)
+		{
+			state[c]=statep[c];
+		}
+	}
+    function MixColumns(state)
+	{
+		for (x=0; x<Nb; ++x)
+		{
+			statep[x*4+0]=gf_mult(2,state[x*4+0]) ^ gf_mult(3,state[x*4+1]) ^gf_mult(1,state[x*4+2]) ^gf_mult(1,state[x*4+3]) ;
+			statep[x*4+1]=gf_mult(1,state[x*4+0]) ^ gf_mult(2,state[x*4+1]) ^gf_mult(3,state[x*4+2]) ^gf_mult(1,state[x*4+3]) ;
+			statep[x*4+2]=gf_mult(1,state[x*4+0]) ^ gf_mult(1,state[x*4+1]) ^gf_mult(2,state[x*4+2]) ^gf_mult(3,state[x*4+3]) ;
+			statep[x*4+3]=gf_mult(3,state[x*4+0]) ^ gf_mult(1,state[x*4+1]) ^gf_mult(1,state[x*4+2]) ^gf_mult(2,state[x*4+3]) ;
+		}
+		for (y=0; y<4*Nb; ++y)
+			state[y]=statep[y];
+	}
+
+    function AddRoundKey(state, w, p)
+	{
+		for (y=0; y<Nb; y++)
+		{
+
+			state[y*4+0]^=(w[y+p]>>24)&0xff;
+			state[y*4+1]^=(w[y+p]>>16)&0xff;
+			state[y*4+2]^=(w[y+p]>>8)&0xff;
+			state[y*4+3]^=(w[y+p]>>0)&0xff;
+		}
+	}
+
+
+    function Cipher_main(ch_in, ch_out, ch_w) {
+        AddRoundKey(state, ch_w, 0);
+        for (round = 1; round < Nr - 1; ++round) {
+            SubBytes(state);
+            ShiftRows(state);
+            MixColumns(state);
+            AddRoundKey(state, ch_w, round * Nb);
+        }
+        SubBytes(state);
+        ShiftRows(state);
+        AddRoundKey(state, ch_w, Nr);
+    }
+
+    function KeyExpansion(ch_k, ch_w, Nk) {
+        for (i = 0; i < Nk; ++i) {
+            ch_w[i] = (ch_k[i * 4]<<24)|(ch_k[i * 4+1]<<16)|(ch_k[i * 4+2]<<8)|ch_k[i * 4+3];
+        }
+        i = Nk;
+        rcon = 1;
+        while (i < Nb * (Nr + 1)) {
+            temp = ch_w[i - 1]
+            document.getElementById("test").innerHTML += ', i=' + i + ', i%nk=' + (i % Nk);
+            if (i % Nk == 0) {
+                //temp = SubWord(RotWord(temp)) ^ Rcon[i / NK];
+                //if (i==Nk)
+                  document.getElementById("test").innerHTML += [
+                  ", temp="+temp.toString(16),
+                  ", rw="+RotWord(temp).toString(16),
+                  ", sw="+SubWord(RotWord(temp)).toString(16)
+                  ];
+                temp = SubWord(RotWord(temp));
+                //if (i == Nk)
+                //    document.getElementById("test").innerHTML += ","+temp.toString(16);
+                document.getElementById("test").innerHTML += ", rcon=" + rcon.toString(16);
+                temp ^= rcon << 24;
+                rcon = gf_mult(rcon, 2);
+            }
+            else if (Nk > 6 && i % Nk == 4)
+                temp = SubWord(temp);
+            ch_w[i] = ch_w[i - Nk] ^ temp;
+            document.getElementById("test").innerHTML += ', w[i]=' + ch_w[i].toString(16);
+            ++i;
+        }
+        //document.getElementById("test").innerHTML = ArrToHex(ch_w);
+    }
+
+    function Cipher(ch_in, ch_out, ch_k) {
+        if (ch_k.length == 16) { Nk = 4; Nr = 10; }
+        else if (ch_k.length == 24) { Nk = 6; Nr = 12; }
+        else if (ch_k.length == 32) { Nk = 8; Nr = 14; }
+        else throw new Error("Incorrect key length - should be 8, 12, or 16, was " + ch_k.length);
+        ch_w = new Array();
+        KeyExpansion(ch_k, ch_w, Nk);
+        state = new Array();
+        for (i = 0; i < 4*Nb; ++i)
+            state[i] = ch_in[i];
+        round = 0;
+        AddRoundKey(state, ch_w, 0);
+        for (round = 1; round < Nr; ++round) {
+            SubBytes(state);
+            ShiftRows(state);
+            MixColumns(state);
+            AddRoundKey(state, ch_w, round * Nb);
+            //if (round == 2) document.getElementById("test").innerHTML = ArrToHex(state);
+            //if (round == 9) 
+
+            //document.getElementById("test").innerHTML += "<br/>"+ArrToHex(state);
+        }
+        SubBytes(state);
+        ShiftRows(state);
+        AddRoundKey(state, ch_w, Nr * Nb);
+
+        for (i = 0; i < 4*Nb; ++i)
+            ch_out[i] = state[i];
+
+    }
+
+    function hex2num(a, b) {
+
+        z=parseInt(a,16);
+        n=z*16;
+
+        z = parseInt(b, 16);
+        n |= z;
+        return n;
+    }
+
+    function text2char(str) {
+        res = new Array();
+        for (i = 0,j=0; i < str.length; i += 2, ++j) {
+            a = str.charAt(i); b = str.charAt(i + 1)
+            
+            n = hex2num(a, b);
+            res[j] = n;
+        }
+        return res;
+    }
+
+    function char2text(arr) {
+        arr2 = ArrToHex(arr)
+        res = ""
+        for (i = 0; i < arr2.length; ++i) {
+            res += arr2[i].toString(16);
+        }
+        return res;
+    }
+
+    function DoEncode() {
+        //document.getElementById("test").innerHTML = hex2num(1,'a');
+        intext = document.getElementById("input").value;
+        plaintext=text2char(intext);
+        key = document.getElementById("key").value;
+        cipherkey=text2char(key);
+        //document.getElementById("test").innerHTML = cipherkey;
+
+        output = new Array();
+        //try{
+        Cipher(plaintext, output, cipherkey);
+        //} catch(z)
+        //{
+        //}
+
+        outtext=char2text(output);
+        document.getElementById("output").value = outtext;
+    }
+
+</script>
+<form action="aes-js.html">
+<p>Original: <input type="text" id="input" value="00112233445566778899aabbccddeeff"/><input type="button" value="Encode" onclick="DoEncode();"/></p>
+<p>Key: <input type="text" id="key" value="000102030405060708090a0b0c0d0e0f" /></p>
+<!--<p>Key: <input type="text" id="key" value="2b7e151628aed2a6abf7158809cf4f3c" /></p>-->
+<p>Cipher: <input type="text" id="output"/><input type="button" value="Decode"/></p>
+<p id="test"></p>
+</form>
+</body>
+</html>
